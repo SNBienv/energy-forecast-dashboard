@@ -116,10 +116,30 @@ from modules.copernicus_data import (
     fetch_solar_data_cds,
     cds_available,
 )
+from modules.visitor_analytics import (
+    get_visitor_ip,
+    geolocate_ip,
+    log_visitor,
+    get_visitor_df,
+    visitor_summary,
+    create_visitor_map,
+)
 
 # Default plotly template for dark mode
 import plotly.io as pio
 pio.templates.default = "plotly_dark"
+
+# --- Log visitor on page load (once per session) --------------------------------
+if "_visitor_logged" not in st.session_state:
+    try:
+        _vis_ip = get_visitor_ip()
+        _vis_geo = geolocate_ip(_vis_ip)
+        log_visitor(_vis_ip, _vis_geo)
+        st.session_state["_visitor_logged"] = True
+        st.session_state["_visitor_ip"] = _vis_ip
+        st.session_state["_visitor_geo"] = _vis_geo
+    except Exception:
+        st.session_state["_visitor_logged"] = True
 
 
 # --- Resolution helpers -------------------------------------------------------
@@ -464,10 +484,11 @@ else:
     location_name = st.session_state.selected_region
     
     # Create tabs for different sections
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
         "🌤️ Weather", "💨 Wind Energy", "☀️ Solar Energy", 
         "🌬️ Air Quality", "⚠️ Alerts", "🗺️ Map", "📊 Forecast Comparison",
         "🌀 Wind Resource", "🔆 Solar Resource", "⚡ Hybrid & H₂",
+        "👥 Visitor Analytics",
     ])
     
     # ==========================================================================
@@ -1900,6 +1921,90 @@ else:
 
       except Exception as _tab10_err:
         st.error(f"Error rendering Hybrid & H₂ tab: {_tab10_err}")
+
+    # ==========================================================================
+    # TAB 11: Visitor Analytics
+    # ==========================================================================
+    with tab11:
+      try:
+        st.header("👥 Visitor Analytics")
+        st.caption("Live view of who is using this dashboard and where they are located.")
+
+        vdf = get_visitor_df()
+        stats = visitor_summary(vdf)
+
+        # ---- KPI row ----
+        kc1, kc2, kc3, kc4 = st.columns(4)
+        kc1.metric("Total Visits", stats["total_visits"])
+        kc2.metric("Unique Visitors", stats["unique_visitors"])
+        kc3.metric("Countries", stats["countries"])
+        kc4.metric("Cities", stats["cities"])
+
+        st.markdown("---")
+
+        # ---- Map ----
+        st.subheader("🗺️ Visitor Locations")
+        vmap = create_visitor_map(vdf)
+        st_folium(vmap, height=480, use_container_width=True)
+
+        # ---- Charts ----
+        ch1, ch2 = st.columns(2)
+
+        with ch1:
+            st.subheader("Top Countries")
+            if not stats["top_countries"].empty:
+                fig_c = px.bar(
+                    x=stats["top_countries"].values,
+                    y=stats["top_countries"].index,
+                    orientation="h",
+                    labels={"x": "Visits", "y": "Country"},
+                    color_discrete_sequence=["#3498db"],
+                )
+                fig_c.update_layout(yaxis=dict(autorange="reversed"), height=350)
+                st.plotly_chart(fig_c, use_container_width=True)
+            else:
+                st.info("No visitor data yet.")
+
+        with ch2:
+            st.subheader("Top Cities")
+            if not stats["top_cities"].empty:
+                fig_ci = px.bar(
+                    x=stats["top_cities"].values,
+                    y=stats["top_cities"].index,
+                    orientation="h",
+                    labels={"x": "Visits", "y": "City"},
+                    color_discrete_sequence=["#2ecc71"],
+                )
+                fig_ci.update_layout(yaxis=dict(autorange="reversed"), height=350)
+                st.plotly_chart(fig_ci, use_container_width=True)
+            else:
+                st.info("No visitor data yet.")
+
+        # ---- Timeline ----
+        st.subheader("📈 Visits Over Time")
+        if not stats["visits_per_hour"].empty and stats["visits_per_hour"].sum() > 0:
+            fig_t = px.area(
+                x=stats["visits_per_hour"].index,
+                y=stats["visits_per_hour"].values,
+                labels={"x": "Time (UTC)", "y": "Visits"},
+                color_discrete_sequence=["#e74c3c"],
+            )
+            fig_t.update_layout(height=300)
+            st.plotly_chart(fig_t, use_container_width=True)
+        else:
+            st.info("Timeline will appear after more visits.")
+
+        # ---- Raw table (collapsible) ----
+        with st.expander("📋 Full visitor log"):
+            if not vdf.empty:
+                display_df = vdf[["timestamp", "city", "country", "region", "isp", "ip"]].copy()
+                display_df["timestamp"] = display_df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
+                st.dataframe(display_df.sort_values("timestamp", ascending=False), use_container_width=True)
+            else:
+                st.info("No visits recorded yet.")
+
+      except Exception as _tab11_err:
+        st.error(f"Error rendering Visitor Analytics tab: {_tab11_err}")
 
 
 # =============================================================================

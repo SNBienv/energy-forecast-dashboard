@@ -11,3 +11,4 @@ build/
 *.grib
 get-pip.py
 .streamlit/secrets.toml
+data/

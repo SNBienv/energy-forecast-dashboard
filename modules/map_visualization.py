@@ -99,33 +99,12 @@ MOROCCO_BOUNDARY_GEOJSON = {
 
 
 def add_morocco_boundary(m: folium.Map, highlight: bool = True) -> folium.Map:
-    """
-    Mask the dashed internal border that CartoDB / other tile providers
-    draw across Morocco.  We do NOT draw a visible polygon — only an
-    invisible cover line on top of the tile's dashed line so it disappears.
+    """No-op — kept for backward compatibility.
 
-    Args:
-        m: Folium Map object
-        highlight: ignored, kept for backward compatibility
+    We no longer draw any overlay.  Instead we use tile providers
+    that do not render disputed internal borders (Esri Dark Gray
+    Canvas, Esri World Street Map, Esri Satellite).
     """
-    # Thick line matching the dark-tile background, drawn exactly where
-    # tile providers render their Western-Sahara dashed border (~24°N).
-    cover_coords = [
-        [21.33, -17.05], [21.33, -16.50],
-        [21.33, -14.50], [21.33, -13.00],
-        [22.00, -12.20], [23.00, -11.40],
-        [24.00, -10.80], [24.80, -10.20],
-        [25.50, -9.80],  [26.40, -9.20],
-        [27.29, -8.67],
-    ]
-    folium.PolyLine(
-        locations=cover_coords,
-        color="#2b2b2b",   # CartoDB Dark background colour
-        weight=8,
-        opacity=1.0,
-        dash_array="",
-    ).add_to(m)
-
     return m
 
 
@@ -168,9 +147,10 @@ def create_base_map(
     ).add_to(m)
 
     folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attr="CartoDB",
-        name="CartoDB Dark",
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/"
+              "Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri",
+        name="Dark",
     ).add_to(m)
 
     # Add layer control
@@ -647,12 +627,10 @@ def create_town_map(
     ).add_to(m)
 
     folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attr="CartoDB", name="CartoDB Dark",
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/"
+              "Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri", name="Dark",
     ).add_to(m)
-
-    # Morocco boundary overlay (masks tile-level dashed internal lines)
-    add_morocco_boundary(m)
 
     # Centre marker
     popup_parts = [f"<b>{name}</b><br>({lat:.4f}°, {lon:.4f}°)"]

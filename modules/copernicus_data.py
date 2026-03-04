@@ -40,6 +40,34 @@ _CACHE_DIR.mkdir(exist_ok=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# CDS credential helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _get_cds_credentials() -> Optional[Dict[str, str]]:
+    """Return CDS credentials from Streamlit secrets or ~/.cdsapirc."""
+    # 1) Try Streamlit secrets (for cloud deployment)
+    try:
+        import streamlit as st
+        sec = st.secrets.get("cds", {})
+        url = sec.get("url", "").strip()
+        key = sec.get("key", "").strip()
+        if url and key:
+            return {"url": url, "key": key}
+    except Exception:
+        pass
+    # 2) Try environment variables
+    url = os.environ.get("CDSAPI_URL", "").strip()
+    key = os.environ.get("CDSAPI_KEY", "").strip()
+    if url and key:
+        return {"url": url, "key": key}
+    # 3) Fall back to ~/.cdsapirc (cdsapi default)
+    rc = Path.home() / ".cdsapirc"
+    if rc.exists():
+        return None  # let cdsapi.Client() read it automatically
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -164,7 +192,11 @@ def _download_era5(
         return out_path  # cache hit
 
     try:
-        client = cdsapi.Client(quiet=True)
+        creds = _get_cds_credentials()
+        if creds:
+            client = cdsapi.Client(url=creds["url"], key=creds["key"], quiet=True)
+        else:
+            client = cdsapi.Client(quiet=True)
         client.retrieve(product, request, str(out_path))
         return out_path
     except Exception as exc:
@@ -529,10 +561,21 @@ def fetch_solar_data_cds(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def cds_available() -> bool:
-    """Return True if cdsapi can be imported AND a .cdsapirc is found."""
+    """Return True if cdsapi can be imported AND credentials are available."""
     try:
         import cdsapi  # noqa: F401
     except Exception:
         return False
-    rc = Path.home() / ".cdsapirc"
-    return rc.exists()
+    # Check Streamlit secrets
+    try:
+        import streamlit as st
+        sec = st.secrets.get("cds", {})
+        if sec.get("url", "").strip() and sec.get("key", "").strip():
+            return True
+    except Exception:
+        pass
+    # Check env vars
+    if os.environ.get("CDSAPI_URL", "").strip() and os.environ.get("CDSAPI_KEY", "").strip():
+        return True
+    # Check .cdsapirc
+    return (Path.home() / ".cdsapirc").exists()

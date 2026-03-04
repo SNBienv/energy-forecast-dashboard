@@ -10,3 +10,4 @@ build/
 *.nc
 *.grib
 get-pip.py
+.streamlit/secrets.toml

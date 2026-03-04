@@ -19,14 +19,19 @@ plotly>=5.17.0
 folium>=0.14.0
 streamlit-folium>=0.15.0
 
-# Date/time handling (usually bundled with Python, but listed for completeness)
+# Scientific computing
+scipy>=1.11.0
+
+# Date/time handling
 python-dateutil>=2.8.2
 
-# Optional: For enhanced performance
-# aiohttp>=3.8.0  # For async API calls
-# cachetools>=5.3.0  # For better caching
+# Forecasting
+statsmodels>=0.14.0
+xgboost>=2.0.0
 
-# Development dependencies (optional)
-# pytest>=7.4.0
-# black>=23.0.0
-# flake8>=6.1.0
+# Copernicus ERA5 data
+cdsapi>=0.7.0
+
+# Deep learning (LSTM forecasting) – CPU-only to keep deployment small
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.1.0

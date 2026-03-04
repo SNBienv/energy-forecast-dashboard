@@ -1,0 +1,32 @@
+# =============================================================================
+# Renewable Energy & Weather Dashboard - Requirements
+# =============================================================================
+
+# Core web framework
+streamlit>=1.28.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# HTTP requests for API calls
+requests>=2.31.0
+
+# Visualization
+plotly>=5.17.0
+
+# Interactive maps
+folium>=0.14.0
+streamlit-folium>=0.15.0
+
+# Date/time handling (usually bundled with Python, but listed for completeness)
+python-dateutil>=2.8.2
+
+# Optional: For enhanced performance
+# aiohttp>=3.8.0  # For async API calls
+# cachetools>=5.3.0  # For better caching
+
+# Development dependencies (optional)
+# pytest>=7.4.0
+# black>=23.0.0
+# flake8>=6.1.0

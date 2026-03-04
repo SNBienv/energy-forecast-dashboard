@@ -205,11 +205,45 @@ def _download_era5(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ZIP handling (CDS may wrap NetCDF in a zip despite "unarchived")
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import zipfile
+
+
+def _unzip_if_needed(path: Path) -> Path:
+    """If *path* is actually a ZIP archive, extract the first .nc inside
+    and return the path to the extracted file.  Otherwise return *path*."""
+    if not path.exists() or path.stat().st_size == 0:
+        return path
+    # Quick magic-number check: ZIP files start with PK\x03\x04
+    with open(path, "rb") as fh:
+        magic = fh.read(4)
+    if magic != b"PK\x03\x04":
+        return path  # already a raw NetCDF
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            nc_names = [n for n in zf.namelist() if n.endswith(".nc")]
+            if not nc_names:
+                return path  # nothing to extract
+            extracted = path.parent / nc_names[0].replace("/", "_")
+            if not extracted.exists():
+                with zf.open(nc_names[0]) as src, open(extracted, "wb") as dst:
+                    dst.write(src.read())
+            return extracted
+    except Exception:
+        return path
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # NetCDF → DataFrame helpers
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _read_era5_nc(path: Path, lat: float, lon: float) -> Optional[pd.DataFrame]:
     """Read an ERA5 NetCDF and return a DataFrame for the nearest grid point."""
+    # CDS sometimes wraps NetCDF in a ZIP archive — extract first
+    path = _unzip_if_needed(path)
+
     try:
         import xarray as xr
     except ImportError:
@@ -221,7 +255,7 @@ def _read_era5_nc(path: Path, lat: float, lon: float) -> Optional[pd.DataFrame]:
             return None
         return _read_era5_nc_netcdf4(path, lat, lon)
 
-    ds = xr.open_dataset(path)
+    ds = xr.open_dataset(path, engine="netcdf4")
 
     # Select nearest grid point
     if "latitude" in ds.dims:

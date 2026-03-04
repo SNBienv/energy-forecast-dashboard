@@ -100,44 +100,28 @@ MOROCCO_BOUNDARY_GEOJSON = {
 
 def add_morocco_boundary(m: folium.Map, highlight: bool = True) -> folium.Map:
     """
-    Add Morocco's complete unified boundary as an overlay on the map.
-    This draws Morocco as a single whole territory including the southern provinces.
-    A filled polygon with moderate opacity masks any dashed internal lines
-    that tile providers may render.
+    Mask the dashed internal border that CartoDB / other tile providers
+    draw across Morocco.  We do NOT draw a visible polygon — only an
+    invisible cover line on top of the tile's dashed line so it disappears.
 
     Args:
         m: Folium Map object
-        highlight: Whether to highlight the territory with a fill color
+        highlight: ignored, kept for backward compatibility
     """
-    style = {
-        "fillColor": "#1a1a2e",     # Near-black matching dark tiles background
-        "color": "#c1272d",         # Moroccan-flag red outline
-        "weight": 2.5,
-        "fillOpacity": 0.35 if highlight else 0.25,
-        "dashArray": "",
-    }
-
-    geojson_layer = folium.GeoJson(
-        {"type": "FeatureCollection", "features": [MOROCCO_BOUNDARY_GEOJSON]},
-        name="Morocco",
-        style_function=lambda x: style,
-        tooltip="🇲🇦 Kingdom of Morocco",
-    )
-    geojson_layer.add_to(m)
-
-    # ---- Cover line that some tile providers draw across Western Sahara ----
-    # Draw a thick solid line along the ~24°N parallel where CartoDB / others
-    # render a dashed administrative border, so it is completely hidden.
+    # Thick line matching the dark-tile background, drawn exactly where
+    # tile providers render their Western-Sahara dashed border (~24°N).
     cover_coords = [
-        [21.33, -17.05], [21.33, -13.00],   # Mauritania border (already ours)
-        [22.00, -12.20], [23.00, -11.40],    # diagonal part
-        [24.20, -10.50], [25.50, -9.80],
-        [26.40, -9.20],  [27.29, -8.67],    # up to Algeria junction
+        [21.33, -17.05], [21.33, -16.50],
+        [21.33, -14.50], [21.33, -13.00],
+        [22.00, -12.20], [23.00, -11.40],
+        [24.00, -10.80], [24.80, -10.20],
+        [25.50, -9.80],  [26.40, -9.20],
+        [27.29, -8.67],
     ]
     folium.PolyLine(
         locations=cover_coords,
-        color="#1a1a2e",       # same dark fill — blends with tile background
-        weight=6,
+        color="#2b2b2b",   # CartoDB Dark background colour
+        weight=8,
         opacity=1.0,
         dash_array="",
     ).add_to(m)

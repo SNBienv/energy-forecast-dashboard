@@ -485,7 +485,7 @@ else:
     
     # Create tabs for different sections
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
-        "🌤️ Weather", "💨 Wind Energy", "☀️ Solar Energy", 
+        "🌤️ Weather", "💨 Wind Data", "☀️ Solar Data", 
         "🌬️ Air Quality", "⚠️ Alerts", "🗺️ Map", "📊 Forecast Comparison",
         "🌀 Wind Resource", "🔆 Solar Resource", "⚡ Hybrid & H₂",
         "👥 Visitor Analytics",
@@ -608,154 +608,136 @@ else:
         st.error(f"Error rendering Weather tab: {_tab1_err}")
     
     # ==========================================================================
-    # TAB 2: Wind Energy
+    # TAB 2: Wind Data
     # ==========================================================================
     with tab2:
       try:
-        st.header(f"💨 Wind Energy Analysis - {location_name}")
+        st.header(f"💨 Wind Data — {location_name}")
         
         ts2 = get_ts(weather_data, resolution, lat=lat, lon=lon)
         if weather_data and ts2 is not None:
             hourly = ts2
             current = weather_data.get("current", {})
             
-            # Calculate wind energy metrics
+            # Wind data metrics
             avg_wind = hourly["wind_speed"].mean()
             max_wind = hourly["wind_speed"].max()
+            min_wind = hourly["wind_speed"].min()
             current_wind = current.get("wind_speed", avg_wind)
+            avg_gusts = hourly["wind_gusts"].mean() if "wind_gusts" in hourly.columns else avg_wind
             
-            wind_potential = estimate_wind_energy_potential(
-                avg_wind,
-                turbine_capacity=turbine_capacity,
-                rotor_diameter=rotor_diameter
-            )
-            
-            # Wind metrics
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("💨 Current Wind", f"{current_wind:.1f} km/h")
             with col2:
-                st.metric("📊 Average Wind", f"{avg_wind:.1f} km/h")
+                st.metric("📊 Average Wind", f"{avg_wind:.1f} km/h ({avg_wind/3.6:.1f} m/s)")
             with col3:
-                st.metric("⚡ Power Density", f"{wind_potential['power_density_wm2']:.0f} W/m²")
+                st.metric("⬆️ Max Wind", f"{max_wind:.1f} km/h")
             with col4:
-                st.metric("🏭 Est. Daily Energy", f"{wind_potential['estimated_daily_kwh']:.0f} kWh")
-            
-            # Wind class assessment
-            wind_class = wind_potential["wind_class"]
-            st.info(f"**Wind Resource Classification:** {wind_class}")
+                st.metric("🌬️ Avg Gusts", f"{avg_gusts:.1f} km/h")
             
             st.divider()
             
-            # Wind speed chart
+            # Wind speed & gusts chart + direction rose
             col1, col2 = st.columns(2)
             
             with col1:
                 fig_wind = go.Figure()
                 fig_wind.add_trace(go.Scatter(
-                    x=hourly["time"],
-                    y=hourly["wind_speed"],
-                    name="Wind Speed",
-                    fill="tozeroy",
+                    x=hourly["time"], y=hourly["wind_speed"],
+                    name="Wind Speed", fill="tozeroy",
                     line=dict(color=COLORS["wind"])
                 ))
-                fig_wind.add_trace(go.Scatter(
-                    x=hourly["time"],
-                    y=hourly["wind_gusts"],
-                    name="Wind Gusts",
-                    line=dict(color="#e74c3c", dash="dot")
-                ))
+                if "wind_gusts" in hourly.columns:
+                    fig_wind.add_trace(go.Scatter(
+                        x=hourly["time"], y=hourly["wind_gusts"],
+                        name="Wind Gusts",
+                        line=dict(color="#e74c3c", dash="dot")
+                    ))
                 fig_wind.update_layout(
-                    title="Wind Speed Forecast",
+                    title=f"{res_label} Wind Speed & Gusts",
                     xaxis_title="Time (GMT)",
-                    yaxis_title="Wind Speed (km/h)",
+                    yaxis_title="Speed (km/h)",
                     height=400
                 )
                 st.plotly_chart(fig_wind, width="stretch")
             
             with col2:
-                # Wind direction rose (simplified)
                 fig_dir = px.histogram(
-                    hourly,
-                    x="wind_direction",
-                    nbins=16,
+                    hourly, x="wind_direction", nbins=16,
                     title="Wind Direction Distribution",
                     labels={"wind_direction": "Direction (°)"}
                 )
                 fig_dir.update_layout(height=400)
                 st.plotly_chart(fig_dir, width="stretch")
             
-            # Wind energy production estimate table
-            st.subheader("⚡ Energy Production Estimates")
+            # Wind direction time series
+            if "wind_direction" in hourly.columns:
+                fig_wd_ts = go.Figure()
+                fig_wd_ts.add_trace(go.Scatter(
+                    x=hourly["time"], y=hourly["wind_direction"],
+                    mode="markers", marker=dict(size=4, color=COLORS["wind"]),
+                    name="Wind Direction"
+                ))
+                fig_wd_ts.update_layout(
+                    title="Wind Direction Over Time",
+                    xaxis_title="Time (GMT)", yaxis_title="Direction (°)",
+                    yaxis=dict(range=[0, 360]), height=350
+                )
+                st.plotly_chart(fig_wd_ts, width="stretch")
             
-            estimates = {
+            # Wind data summary table
+            st.subheader("📋 Wind Data Summary")
+            wind_stats = {
                 "Metric": [
-                    "Average Wind Speed",
-                    "Power Density",
-                    "Capacity Factor",
-                    "Daily Production (est.)",
-                    "Monthly Production (est.)",
-                    "Annual Production (est.)",
+                    "Current Wind Speed", "Average Wind Speed",
+                    "Maximum Wind Speed", "Minimum Wind Speed",
+                    "Average Wind Gusts", "Maximum Wind Gusts",
+                    "Average Direction", "Data Points",
                 ],
                 "Value": [
+                    f"{current_wind:.1f} km/h ({current_wind/3.6:.1f} m/s)",
                     f"{avg_wind:.1f} km/h ({avg_wind/3.6:.1f} m/s)",
-                    f"{wind_potential['power_density_wm2']:.1f} W/m²",
-                    f"{wind_potential['capacity_factor']*100:.1f}%",
-                    f"{wind_potential['estimated_daily_kwh']:.0f} kWh",
-                    f"{wind_potential['estimated_daily_kwh']*30:.0f} kWh",
-                    f"{wind_potential['estimated_daily_kwh']*365:.0f} kWh",
+                    f"{max_wind:.1f} km/h ({max_wind/3.6:.1f} m/s)",
+                    f"{min_wind:.1f} km/h ({min_wind/3.6:.1f} m/s)",
+                    f"{avg_gusts:.1f} km/h ({avg_gusts/3.6:.1f} m/s)",
+                    f"{hourly['wind_gusts'].max():.1f} km/h" if "wind_gusts" in hourly.columns else "N/A",
+                    f"{hourly['wind_direction'].mean():.0f}°" if "wind_direction" in hourly.columns else "N/A",
+                    f"{len(hourly)} ({res_label})",
                 ]
             }
-            st.table(pd.DataFrame(estimates))
+            st.table(pd.DataFrame(wind_stats))
+            
+            st.info("💡 For wind energy production estimates, Weibull fitting, wake modelling, and farm AEP see the **🌀 Wind Resource** tab.")
         else:
             st.warning("Wind data not available.")
       except Exception as _tab2_err:
-        st.error(f"Error rendering Wind Energy tab: {_tab2_err}")
+        st.error(f"Error rendering Wind Data tab: {_tab2_err}")
     
     # ==========================================================================
-    # TAB 3: Solar Energy
+    # TAB 3: Solar Data
     # ==========================================================================
     with tab3:
       try:
-        st.header(f"☀️ Solar Energy Analysis - {location_name}")
+        st.header(f"☀️ Solar Data — {location_name}")
         
         if solar_data and "daily" in solar_data and solar_data["daily"] is not None:
             daily_solar = solar_data["daily"]
             
-            # Calculate solar metrics
-            # radiation_sum is in MJ/m²; divide by 3.6 to get kWh/m²
+            # Solar data metrics
             avg_radiation = daily_solar["radiation_sum"].mean() / 3.6
+            max_radiation = daily_solar["radiation_sum"].max() / 3.6
             avg_psh = daily_solar["peak_sun_hours"].mean()
+            resource_class = get_solar_resource_class(avg_radiation)
             
-            # Soiling calculation
-            climate_type = REGION_CLIMATE.get(location_name, "semi_arid")
-            soiling = calculate_soiling_loss(
-                region_name=location_name,
-                days_since_cleaning=days_since_cleaning
-            )
-            
-            # Solar potential
-            solar_potential = calculate_solar_potential(
-                ghi_kwh_m2_day=avg_radiation,
-                panel_area_m2=panel_area,
-                panel_efficiency=panel_efficiency,
-                soiling_loss=soiling["soiling_loss_percent"] / 100,
-                ambient_temp=weather_data.get("current", {}).get("temperature", 25) if weather_data else 25
-            )
-            
-            # Optimal tilt
-            optimal_tilt = calculate_optimal_tilt(lat)
-            
-            # Solar metrics
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("☀️ Avg. Irradiance", f"{avg_radiation:.2f} kWh/m²/day")
+                st.metric("☀️ Avg Irradiance", f"{avg_radiation:.2f} kWh/m²/day")
             with col2:
                 st.metric("🔆 Peak Sun Hours", f"{avg_psh:.1f} hours")
             with col3:
-                st.metric("⚡ Daily Output", f"{solar_potential['net_energy_kwh_day']:.0f} kWh")
+                st.metric("⬆️ Max Irradiance", f"{max_radiation:.2f} kWh/m²/day")
             with col4:
-                resource_class = get_solar_resource_class(avg_radiation)
                 st.metric("📊 Resource Class", resource_class)
             
             st.divider()
@@ -763,7 +745,6 @@ else:
             col1, col2 = st.columns(2)
             
             with col1:
-                # Solar radiation chart
                 fig_solar = go.Figure()
                 fig_solar.add_trace(go.Bar(
                     x=daily_solar["date"],
@@ -780,7 +761,6 @@ else:
                 st.plotly_chart(fig_solar, width="stretch")
             
             with col2:
-                # Sunshine duration
                 fig_sun = go.Figure()
                 fig_sun.add_trace(go.Bar(
                     x=daily_solar["date"],
@@ -802,73 +782,59 @@ else:
                 )
                 st.plotly_chart(fig_sun, width="stretch")
             
-            st.divider()
-            
-            # Soiling Analysis
-            st.subheader("🏜️ Soiling Effect Analysis")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"""
-                **Climate Type:** {soiling['climate_type'].title()}
-                
-                **Current Soiling Loss:** {soiling['soiling_loss_percent']:.1f}%
-                
-                **Panel Transmission:** {soiling['transmission_factor']*100:.1f}%
-                
-                **Base Monthly Soiling Rate:** {soiling['base_monthly_soiling']:.1f}%
-                
-                **Recommended Cleaning Interval:** Every {soiling['recommended_cleaning_interval']} days
-                """)
-            
-            with col2:
-                # Soiling impact gauge
-                fig_gauge = go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=soiling['soiling_loss_percent'],
-                    domain={'x': [0, 1], 'y': [0, 1]},
-                    title={'text': "Soiling Loss (%)"},
-                    gauge={
-                        'axis': {'range': [0, 30]},
-                        'bar': {'color': "darkblue"},
-                        'steps': [
-                            {'range': [0, 5], 'color': "lightgreen"},
-                            {'range': [5, 15], 'color': "yellow"},
-                            {'range': [15, 30], 'color': "red"}
-                        ],
-                    }
+            # Hourly radiation components (if available)
+            sol_ts3 = get_ts(solar_data, resolution, lat=lat, lon=lon)
+            if sol_ts3 is not None and "shortwave_radiation" in sol_ts3.columns:
+                fig_ghi_h = go.Figure()
+                fig_ghi_h.add_trace(go.Scatter(
+                    x=sol_ts3["time"], y=sol_ts3["shortwave_radiation"],
+                    fill="tozeroy", name="GHI (Global Horizontal)",
+                    line=dict(color="#f1c40f"),
                 ))
-                fig_gauge.update_layout(height=300)
-                st.plotly_chart(fig_gauge, width="stretch")
+                if "direct_radiation" in sol_ts3.columns:
+                    fig_ghi_h.add_trace(go.Scatter(
+                        x=sol_ts3["time"], y=sol_ts3["direct_radiation"],
+                        name="Direct (DNI)", line=dict(color="#e67e22", dash="dot"),
+                    ))
+                if "diffuse_radiation" in sol_ts3.columns:
+                    fig_ghi_h.add_trace(go.Scatter(
+                        x=sol_ts3["time"], y=sol_ts3["diffuse_radiation"],
+                        name="Diffuse", line=dict(color="#3498db", dash="dash"),
+                    ))
+                fig_ghi_h.update_layout(
+                    title=f"{res_label} Solar Radiation Components",
+                    xaxis_title="Time (GMT)", yaxis_title="Irradiance (W/m²)",
+                    height=400
+                )
+                st.plotly_chart(fig_ghi_h, width="stretch")
             
-            # Production estimates table
-            st.subheader("⚡ Energy Production Estimates")
-            
-            production_data = {
+            # Solar data summary table
+            st.subheader("📋 Solar Data Summary")
+            solar_stats = {
                 "Metric": [
-                    "Gross Daily Production",
-                    "Net Daily Production (after losses)",
-                    "Monthly Production",
-                    "Annual Production",
-                    f"Optimal Panel Tilt",
-                    "Capacity Factor",
-                    "Specific Yield",
+                    "Average Daily Irradiance", "Maximum Daily Irradiance",
+                    "Minimum Daily Irradiance", "Average Peak Sun Hours",
+                    "Avg Sunshine Duration", "Avg Daylight Duration",
+                    "Solar Resource Class", "Forecast Period",
                 ],
                 "Value": [
-                    f"{solar_potential['gross_energy_kwh_day']:.1f} kWh",
-                    f"{solar_potential['net_energy_kwh_day']:.1f} kWh",
-                    f"{solar_potential['monthly_energy_kwh']:.0f} kWh",
-                    f"{solar_potential['annual_energy_kwh']:.0f} kWh",
-                    f"{optimal_tilt['annual_optimal']:.0f}°",
-                    f"{solar_potential['capacity_factor']*100:.1f}%",
-                    f"{solar_potential['specific_yield_kwh_kwp']:.1f} kWh/kWp/day",
+                    f"{avg_radiation:.2f} kWh/m²/day",
+                    f"{max_radiation:.2f} kWh/m²/day",
+                    f"{daily_solar['radiation_sum'].min() / 3.6:.2f} kWh/m²/day",
+                    f"{avg_psh:.1f} hours",
+                    f"{daily_solar['sunshine_duration'].mean() / 3600:.1f} hours/day",
+                    f"{daily_solar['daylight_duration'].mean() / 3600:.1f} hours/day",
+                    resource_class,
+                    f"{len(daily_solar)} days",
                 ]
             }
-            st.table(pd.DataFrame(production_data))
+            st.table(pd.DataFrame(solar_stats))
+            
+            st.info("💡 For PV system sizing, energy production estimates, soiling analysis, and LCOE see the **🔆 Solar Resource** tab.")
         else:
             st.warning("Solar data not available.")
       except Exception as _tab3_err:
-        st.error(f"Error rendering Solar Energy tab: {_tab3_err}")
+        st.error(f"Error rendering Solar Data tab: {_tab3_err}")
     
     # ==========================================================================
     # TAB 4: Air Quality
@@ -1168,16 +1134,16 @@ else:
         st.code(traceback.format_exc())
 
     # ==========================================================================
-    # TAB 7: Forecast Comparison (Internal vs API)
+    # TAB 7: Forecast Comparison — ALL Variables
     # ==========================================================================
     with tab7:
       try:
-        st.header(f"📊 Forecast Comparison - {location_name}")
+        st.header(f"📊 Forecast Comparison — {location_name}")
         st.markdown("""
-        Compare **API-provided forecasts** (Open-Meteo) with our **internal prediction methods**.
-        The API hourly data is split into a history window (used by internal models) and a
-        future window; the internal models then forecast the future window so we can
-        measure how each method stacks up against the professional API forecast.
+        Compare **API-provided forecasts** with our **internal prediction methods**
+        (Persistence, SARIMAX, XGBoost, LSTM, Ensemble) across **all weather variables**.
+        The data is split into a history window and a future window; internal models
+        forecast the future window so we can benchmark them against the API forecast.
         """)
 
         ts7 = get_ts(weather_data, resolution, lat=lat, lon=lon)
@@ -1185,22 +1151,35 @@ else:
             hourly_df = ts7
             total_hours = len(hourly_df)
 
-            # --- User controls ---
+            # All forecastable variables
+            _FC_ALL_VARS = {
+                "temperature": "🌡️ Temperature (°C)",
+                "wind_speed": "💨 Wind Speed (km/h)",
+                "humidity": "💧 Humidity (%)",
+                "cloud_cover": "☁️ Cloud Cover (%)",
+                "pressure": "📊 Pressure (hPa)",
+                "precipitation": "🌧️ Precipitation (mm)",
+                "wind_gusts": "🌬️ Wind Gusts (km/h)",
+                "dew_point": "💦 Dew Point (°C)",
+            }
+
+            # Keep only variables present in the data with enough values
+            _fc_avail = {k: v for k, v in _FC_ALL_VARS.items()
+                         if k in hourly_df.columns and hourly_df[k].notna().sum() > 10}
+
+            # --- Controls ---
             fc_col1, fc_col2 = st.columns(2)
             with fc_col1:
-                variable = st.selectbox(
-                    "Variable to compare",
-                    ["temperature", "wind_speed", "humidity", "cloud_cover", "pressure"],
-                    format_func=lambda v: {
-                        "temperature": "🌡️ Temperature (°C)",
-                        "wind_speed": "💨 Wind Speed (km/h)",
-                        "humidity": "💧 Humidity (%)",
-                        "cloud_cover": "☁️ Cloud Cover (%)",
-                        "pressure": "📊 Pressure (hPa)",
-                    }.get(v, v),
+                _fc_selected = st.multiselect(
+                    "Variables to forecast",
+                    options=list(_fc_avail.keys()),
+                    default=list(_fc_avail.keys()),
+                    format_func=lambda v: _fc_avail.get(v, v),
                 )
             with fc_col2:
-                _step_label = {"h": "hours", "15min": "15-min steps", "5min": "5-min steps", "1min": "1-min steps", "D": "days"}.get(freq, "steps")
+                _step_label = {"h": "hours", "15min": "15-min steps",
+                               "5min": "5-min steps", "1min": "1-min steps",
+                               "D": "days"}.get(freq, "steps")
                 fc_horizon = st.slider(
                     f"Forecast horizon ({_step_label})",
                     min_value=6,
@@ -1209,203 +1188,230 @@ else:
                     step=6,
                 )
 
-            # --- Run comparison ---
-            with st.spinner("Running internal forecast models…"):
-                comparison = run_forecast_comparison(
-                    weather_data,
-                    target_col=variable,
-                    horizon_hours=fc_horizon,
-                    history_hours=total_hours - fc_horizon,
-                    freq=freq,
-                    ts_df=ts7,
-                )
+            if _fc_selected:
+                _fc_run = st.button("🚀 Run Forecast Comparison", type="primary",
+                                    use_container_width=True)
 
-            history = comparison["history"]
-            api_future = comparison["api_future"]
-            internal = comparison["internal_forecasts"]
-            metrics = comparison["metrics"]
+                # Run or use cached results
+                if _fc_run:
+                    _fc_store = {}
+                    _fc_bar = st.progress(0, text="Initialising…")
+                    for _i, _var in enumerate(_fc_selected):
+                        _fc_bar.progress(
+                            _i / len(_fc_selected),
+                            text=f"Forecasting {_fc_avail[_var]}…"
+                        )
+                        _fc_store[_var] = run_forecast_comparison(
+                            weather_data,
+                            target_col=_var,
+                            horizon_hours=fc_horizon,
+                            history_hours=total_hours - fc_horizon,
+                            freq=freq,
+                            ts_df=ts7,
+                        )
+                    _fc_bar.progress(1.0, text="✅ All forecasts complete!")
+                    st.session_state["_fc_results"] = _fc_store
+                    st.session_state["_fc_vars"] = _fc_selected
 
-            # At high resolution, expand API forecast to a staircase
-            _is_highres = resolution in ("5min", "1min")
+                _fc_store = st.session_state.get("_fc_results", {})
+                _fc_cached_vars = st.session_state.get("_fc_vars", [])
 
-            if not api_future.empty and not internal.empty:
-                # ---- Main chart: API vs Internal methods ----
-                var_labels = {
-                    "temperature": "Temperature (°C)",
-                    "wind_speed": "Wind Speed (km/h)",
-                    "humidity": "Humidity (%)",
-                    "cloud_cover": "Cloud Cover (%)",
-                    "pressure": "Pressure (hPa)",
-                }
-                y_label = var_labels.get(variable, variable)
+                if _fc_store:
+                    method_colors = {
+                        "Persistence": "#e74c3c",
+                        "SARIMAX": "#f39c12",
+                        "XGBoost": "#9b59b6",
+                        "LSTM": "#1abc9c",
+                        "Ensemble Mean": "#2c3e50",
+                    }
+                    _is_highres = resolution in ("5min", "1min")
 
-                fig = go.Figure()
+                    # Build sub-tabs: one per variable + combined summary
+                    _vtab_labels = [_fc_avail.get(v, v) for v in _fc_cached_vars if v in _fc_store]
+                    _vtab_labels.append("📊 Combined Summary")
+                    _vtabs = st.tabs(_vtab_labels)
 
-                # Historical data (grey background)
-                if not history.empty:
-                    fig.add_trace(go.Scatter(
-                        x=history["time"],
-                        y=history[variable],
-                        mode="lines",
-                        name="Historical Observations",
-                        line=dict(color="#95a5a6", width=1),
-                        opacity=0.6,
-                    ))
+                    _all_metrics = {}
 
-                # API forecast — staircase at high resolution, smooth otherwise
-                if _is_highres:
-                    api_step = step_function_df(
-                        api_future.rename(columns={"value": variable}),
-                        target_freq=resolution,
-                    )
-                    fig.add_trace(go.Scatter(
-                        x=api_step["time"],
-                        y=api_step[variable],
-                        mode="lines",
-                        name="API Forecast (staircase)",
-                        line=dict(color="#2980b9", width=2, shape="hv"),
-                    ))
+                    for _vi, _var in enumerate([v for v in _fc_cached_vars if v in _fc_store]):
+                        comp = _fc_store[_var]
+                        _yl = _fc_avail.get(_var, _var)
+
+                        with _vtabs[_vi]:
+                            _hist = comp["history"]
+                            _api = comp["api_future"]
+                            _intl = comp["internal_forecasts"]
+                            _met = comp["metrics"]
+
+                            if not _api.empty and not _intl.empty:
+                                # --- Forecast chart ---
+                                _fig = go.Figure()
+
+                                if not _hist.empty:
+                                    _fig.add_trace(go.Scatter(
+                                        x=_hist["time"], y=_hist[_var],
+                                        mode="lines", name="Historical",
+                                        line=dict(color="#95a5a6", width=1),
+                                        opacity=0.6,
+                                    ))
+
+                                if _is_highres:
+                                    _api_s = step_function_df(
+                                        _api.rename(columns={"value": _var}),
+                                        target_freq=resolution,
+                                    )
+                                    _fig.add_trace(go.Scatter(
+                                        x=_api_s["time"], y=_api_s[_var],
+                                        mode="lines", name="API Forecast",
+                                        line=dict(color="#2980b9", width=2, shape="hv"),
+                                    ))
+                                else:
+                                    _fig.add_trace(go.Scatter(
+                                        x=_api["time"], y=_api["value"],
+                                        mode="lines", name="API Forecast",
+                                        line=dict(color="#2980b9", width=3),
+                                    ))
+
+                                for _mn, _grp in _intl.groupby("method"):
+                                    _mc = method_colors.get(str(_mn), "#7f8c8d")
+                                    _ens = _mn == "Ensemble Mean"
+                                    _fig.add_trace(go.Scatter(
+                                        x=_grp["time"], y=_grp["value"],
+                                        mode="lines", name=str(_mn),
+                                        line=dict(color=_mc,
+                                                  width=3 if _ens else 1.5,
+                                                  dash="solid" if _ens else "dot"),
+                                    ))
+
+                                if not _hist.empty:
+                                    _spt = _hist["time"].iloc[-1]
+                                    _spdt = _spt.to_pydatetime() if hasattr(_spt, 'to_pydatetime') else _spt
+                                    _fig.add_shape(type="line",
+                                                   x0=_spdt, x1=_spdt,
+                                                   y0=0, y1=1, yref="paper",
+                                                   line=dict(dash="dash",
+                                                             color="rgba(255,255,255,0.3)",
+                                                             width=1.5))
+
+                                _fig.update_layout(
+                                    title=f"{_yl} — API vs Internal Forecasts",
+                                    xaxis_title="Time (GMT)", yaxis_title=_yl,
+                                    height=450,
+                                    legend=dict(orientation="h", yanchor="bottom", y=-0.35, x=0),
+                                    hovermode="x unified",
+                                )
+                                st.plotly_chart(_fig, width="stretch")
+
+                                # --- Accuracy table ---
+                                if _met:
+                                    st.subheader(f"📏 Accuracy — {_yl}")
+                                    _mr = [{"Method": m, **v} for m, v in _met.items()]
+                                    _mdf = pd.DataFrame(_mr).set_index("Method")
+                                    _best = _mdf["RMSE"].idxmin()
+                                    st.dataframe(
+                                        _mdf.style.highlight_min(
+                                            subset=["MAE", "RMSE", "MAPE (%)"],
+                                            color="#d4edda",
+                                        ),
+                                        width="stretch",
+                                    )
+                                    st.success(f"🏆 Best method: **{_best}**")
+                                    _all_metrics[_var] = _met
+
+                                # --- Error chart ---
+                                _efig = go.Figure()
+                                for _mn, _grp in _intl.groupby("method"):
+                                    _mg = pd.merge(
+                                        _api[["time", "value"]].rename(columns={"value": "api"}),
+                                        _grp[["time", "value"]].rename(columns={"value": "pred"}),
+                                        on="time", how="inner",
+                                    )
+                                    if _mg.empty:
+                                        continue
+                                    _err = _mg["pred"] - _mg["api"]
+                                    _efig.add_trace(go.Scatter(
+                                        x=_mg["time"], y=_err, mode="lines",
+                                        name=str(_mn),
+                                        line=dict(color=method_colors.get(str(_mn), "#7f8c8d"),
+                                                  width=1.5),
+                                    ))
+                                _efig.add_hline(y=0, line_dash="solid", line_color="black", line_width=1)
+                                _efig.update_layout(
+                                    title=f"Prediction Error — {_yl}",
+                                    xaxis_title="Time", yaxis_title="Error",
+                                    height=350,
+                                    legend=dict(orientation="h", yanchor="bottom", y=-0.35, x=0),
+                                    hovermode="x unified",
+                                )
+                                st.plotly_chart(_efig, width="stretch")
+                            else:
+                                st.warning(f"Insufficient data for {_yl}.")
+
+                    # ---- Combined Summary tab ----
+                    with _vtabs[-1]:
+                        if _all_metrics:
+                            st.subheader("🏆 Best Method per Variable")
+                            _sr = []
+                            for _var, _met in _all_metrics.items():
+                                _mdf2 = pd.DataFrame(_met).T
+                                _bs = _mdf2["RMSE"].idxmin()
+                                _sr.append({
+                                    "Variable": _fc_avail.get(_var, _var),
+                                    "Best Method": _bs,
+                                    "RMSE": _mdf2.loc[_bs, "RMSE"],
+                                    "MAE": _mdf2.loc[_bs, "MAE"],
+                                    "R²": _mdf2.loc[_bs, "R²"],
+                                })
+                            st.dataframe(pd.DataFrame(_sr).set_index("Variable"),
+                                         width="stretch")
+
+                            st.divider()
+
+                            # RMSE grouped bar chart
+                            st.subheader("📊 RMSE by Method Across Variables")
+                            _rd = []
+                            for _var, _met in _all_metrics.items():
+                                for _mn, _vals in _met.items():
+                                    _short = _fc_avail.get(_var, _var)
+                                    # Extract short label after emoji
+                                    _parts = _short.split(" ", 1)
+                                    _lbl = _parts[1] if len(_parts) > 1 else _short
+                                    _rd.append({"Variable": _lbl, "Method": _mn,
+                                                "RMSE": _vals["RMSE"]})
+                            if _rd:
+                                _rdf = pd.DataFrame(_rd)
+                                _fig_r = px.bar(
+                                    _rdf, x="Variable", y="RMSE", color="Method",
+                                    barmode="group",
+                                    title="RMSE Comparison Across Variables",
+                                    color_discrete_map=method_colors,
+                                )
+                                _fig_r.update_layout(height=450)
+                                st.plotly_chart(_fig_r, width="stretch")
+                        else:
+                            st.info("Run the forecast to see combined results.")
+
+                    # ---- Method info ----
+                    with st.expander("ℹ️ About the Internal Forecasting Methods"):
+                        avail = available_methods()
+                        avail_md = "  \n".join(
+                            f"- **{m}**: {'✅ Available' if v else '❌ Not installed'}"
+                            for m, v in avail.items()
+                        )
+                        st.markdown(f"**Back-end availability**  \n{avail_md}")
+                        st.markdown("""
+                        | Method | Description |
+                        |--------|-------------|
+                        | **Persistence** | Last observed value repeated forward. Simplest baseline. |
+                        | **SARIMAX** | Seasonal ARIMA(1,1,1)(1,1,0,24). Trend + 24-h seasonal patterns. |
+                        | **XGBoost** | Gradient-boosted trees with lag features + cyclical time encoding. |
+                        | **LSTM** | PyTorch RNN (48 hidden units). Non-linear temporal dependencies. |
+                        | **Ensemble Mean** | Weighted average of all methods. Generally most robust. |
+                        """)
                 else:
-                    fig.add_trace(go.Scatter(
-                        x=api_future["time"],
-                        y=api_future["value"],
-                        mode="lines",
-                        name="API Forecast (Open-Meteo)",
-                        line=dict(color="#2980b9", width=3),
-                    ))
-
-                # Internal methods
-                method_colors = {
-                    "Persistence": "#e74c3c",
-                    "SARIMAX": "#f39c12",
-                    "XGBoost": "#9b59b6",
-                    "LSTM": "#1abc9c",
-                    "Ensemble Mean": "#2c3e50",
-                }
-
-                for method_name, grp in internal.groupby("method"):
-                    color = method_colors.get(str(method_name), "#7f8c8d")
-                    is_ensemble = method_name == "Ensemble Mean"
-                    fig.add_trace(go.Scatter(
-                        x=grp["time"],
-                        y=grp["value"],
-                        mode="lines",
-                        name=str(method_name),
-                        line=dict(
-                            color=color,
-                            width=3 if is_ensemble else 1.5,
-                            dash="solid" if is_ensemble else "dot",
-                        ),
-                    ))
-
-                # Vertical line at split point
-                if not history.empty:
-                    split_time = history["time"].iloc[-1]
-                    split_dt = split_time.to_pydatetime() if hasattr(split_time, 'to_pydatetime') else split_time
-                    fig.add_shape(
-                        type="line",
-                        x0=split_dt, x1=split_dt,
-                        y0=0, y1=1, yref="paper",
-                        line=dict(dash="dash", color="rgba(255,255,255,0.3)", width=1.5),
-                    )
-                    fig.add_annotation(
-                        x=split_dt, y=1, yref="paper",
-                        text="Forecast Start",
-                        showarrow=False,
-                        font=dict(size=11, color="#adb5bd"),
-                        yshift=10,
-                    )
-
-                fig.update_layout(
-                    title=f"{y_label} — API vs Internal Forecasts",
-                    xaxis_title="Time (GMT)",
-                    yaxis_title=y_label,
-                    height=500,
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.35, x=0),
-                    hovermode="x unified",
-                )
-                st.plotly_chart(fig, width="stretch")
-
-                # ---- Accuracy table ----
-                st.subheader("📏 Accuracy Metrics (vs API Forecast)")
-                st.caption(
-                    "Lower MAE / RMSE = closer to API forecast. "
-                    "Bias > 0 means the method over-estimates."
-                )
-
-                if metrics:
-                    metrics_rows = []
-                    for method_name, vals in metrics.items():
-                        row = {"Method": method_name}
-                        row.update(vals)
-                        metrics_rows.append(row)
-                    metrics_df = pd.DataFrame(metrics_rows).set_index("Method")
-
-                    # Highlight the best method (lowest RMSE)
-                    best_method = metrics_df["RMSE"].idxmin()
-                    st.dataframe(
-                        metrics_df.style.highlight_min(
-                            subset=["MAE", "RMSE", "MAPE (%)"],
-                            color="#d4edda",
-                        ),
-                        width="stretch",
-                    )
-                    st.success(f"🏆 Best internal method (lowest RMSE): **{best_method}**")
-                else:
-                    st.info("Not enough overlapping data to compute accuracy metrics.")
-
-                # ---- Error distribution chart ----
-                st.subheader("📉 Forecast Error Distribution")
-
-                error_fig = go.Figure()
-                for method_name, grp in internal.groupby("method"):
-                    merged = pd.merge(
-                        api_future[["time", "value"]].rename(columns={"value": "api"}),
-                        grp[["time", "value"]].rename(columns={"value": "pred"}),
-                        on="time", how="inner",
-                    )
-                    if merged.empty:
-                        continue
-                    errors = merged["pred"] - merged["api"]
-                    color = method_colors.get(str(method_name), "#7f8c8d")
-                    error_fig.add_trace(go.Scatter(
-                        x=merged["time"],
-                        y=errors,
-                        mode="lines",
-                        name=str(method_name),
-                        line=dict(color=color, width=1.5),
-                    ))
-
-                error_fig.add_hline(y=0, line_dash="solid", line_color="black", line_width=1)
-                error_fig.update_layout(
-                    title="Prediction Error Over Time (Internal − API)",
-                    xaxis_title="Time",
-                    yaxis_title="Error",
-                    height=400,
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.35, x=0),
-                    hovermode="x unified",
-                )
-                st.plotly_chart(error_fig, width="stretch")
-
-                # ---- Method descriptions ----
-                with st.expander("ℹ️ About the Internal Forecasting Methods"):
-                    avail = available_methods()
-                    avail_md = "  \n".join(
-                        f"- **{m}**: {'✅ Available' if v else '❌ Not installed'}"
-                        for m, v in avail.items()
-                    )
-                    st.markdown(f"**Back-end availability**  \n{avail_md}")
-                    st.markdown("""
-                    | Method | Description |
-                    |--------|-------------|
-                    | **Persistence** | Assumes the last observed value continues unchanged. Simplest possible baseline. |
-                    | **SARIMAX** | Seasonal ARIMA(1,1,1)(1,1,0,24). Captures trend, autocorrelation, and 24-h seasonal patterns. |
-                    | **XGBoost** | Gradient-boosted trees with lag features (1-24 h) and hour-of-day cyclical encoding. Recursive multi-step prediction. |
-                    | **LSTM** | PyTorch recurrent neural network (48 hidden units, 30 epochs). Learns non-linear temporal dependencies from a sliding window. |
-                    | **Ensemble Mean** | Weighted average of all available method outputs. Generally more robust than any single method. |
-                    """)
+                    st.info("Click **🚀 Run Forecast Comparison** to generate forecasts for all selected variables.")
             else:
-                st.warning("Not enough hourly data to run forecast comparison. Try fetching more forecast days.")
+                st.info("Select at least one variable to forecast.")
         else:
             st.warning("Weather data not available. Please fetch data from the sidebar first.")
       except Exception as _tab7_err:
